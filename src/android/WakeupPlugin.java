@@ -25,6 +25,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.util.Log;
+import android.view.WindowManager;
+import android.view.Window;
 
 public class WakeupPlugin extends CordovaPlugin {
 
@@ -60,6 +62,43 @@ public class WakeupPlugin extends CordovaPlugin {
         }
         super.onReset();
     }
+
+    @Override
+    public void onResume(boolean multitasking) {
+        super.onResume(multitasking);
+        Log.d(LOG_TAG, "resume");
+        final Window win = cordova.getActivity().getWindow();
+        win.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
+        if (!cordova.getActivity().getIntent().getBooleanExtra("screen_off", false))
+        {
+            win.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                    | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                    | WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON);
+        }
+    }
+
+    @Override
+    public void onPause(boolean multitasking) {
+        super.onPause(multitasking);
+        Log.d(LOG_TAG, "pause");
+    }
+
+//    public void onNewIntent(Intent intent) {
+//        String playStream="";
+//
+//        Log.d(LOG_TAG, "onNewIntent: " + intent);
+//        playStream = intent.getStringExtra("playStream");
+//
+//        if(playStream != null){
+//            if(playStream.equals("true")){
+//
+//                Log.d(LOG_TAG,"Starting stream from Wakeupplugin");
+//                WakeupPlugin.fireEvent("please start the stream :)");
+//            }
+//        }
+//    }
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {

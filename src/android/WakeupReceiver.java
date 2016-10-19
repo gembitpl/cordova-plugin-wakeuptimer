@@ -10,13 +10,11 @@ import org.json.JSONObject;
 import android.annotation.SuppressLint;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
-import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.PowerManager;
 import android.util.Log;
 
 public class WakeupReceiver extends BroadcastReceiver {
@@ -41,7 +39,7 @@ public class WakeupReceiver extends BroadcastReceiver {
             Intent i = new Intent(context, c);
             i.putExtra("wakeup", true);
             Bundle extrasBundle = intent.getExtras();
-            String extras = null;
+            JSONObject extras = null;
             if (extrasBundle != null && extrasBundle.get("extra") != null) {
                 extras = extrasBundle.get("extra").toString();
             }
@@ -51,14 +49,6 @@ public class WakeupReceiver extends BroadcastReceiver {
             }
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(i);
-
-            PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-            PowerManager.WakeLock wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, LOG_TAG);
-            wakeLock.acquire();
-
-            KeyguardManager keyguardManager = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
-            KeyguardManager.KeyguardLock keyguardLock = keyguardManager.newKeyguardLock(LOG_TAG);
-            keyguardLock.disableKeyguard();
 
             if (WakeupPlugin.connectionCallbackContext != null) {
                 JSONObject o = new JSONObject();
