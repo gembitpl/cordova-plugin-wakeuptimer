@@ -1,4 +1,4 @@
-package org.nypr.cordova.wakeupplugin;
+package pl.gembit.cordova.wakeupplugin;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
