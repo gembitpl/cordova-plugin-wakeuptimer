@@ -39,9 +39,9 @@ public class WakeupReceiver extends BroadcastReceiver {
             Intent i = new Intent(context, c);
             i.putExtra("wakeup", true);
             Bundle extrasBundle = intent.getExtras();
-            JSONObject extras = null;
+            String extras = null;
             if (extrasBundle != null && extrasBundle.get("extra") != null) {
-                extras = extrasBundle.get("extra")
+                extras = extrasBundle.get("extra").toString();
             }
 
             if (extras != null) {
