@@ -7,14 +7,17 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TimeZone;
+import java.lang.reflect.Method;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
+import org.apache.cordova.CordovaWebView;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.annotation.SuppressLint;
@@ -31,6 +34,9 @@ import android.view.Window;
 public class WakeupPlugin extends CordovaPlugin {
 
     protected static final String LOG_TAG = "WakeupPlugin";
+
+    // Reference to the web view for static access
+    private static CordovaWebView webView = null;
 
     protected static final int ID_DAYLIST_OFFSET = 10010;
     protected static final int ID_ONETIME_OFFSET = 10000;
@@ -101,57 +107,99 @@ public class WakeupPlugin extends CordovaPlugin {
 //    }
 
     @Override
-    public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
-        boolean ret = true;
-        try {
-            if (action.equalsIgnoreCase("wakeup")) {
-                JSONObject options = args.getJSONObject(0);
+    public boolean execute (final String action, final JSONArray args,
+                            final CallbackContext command) throws JSONException {
 
-                JSONArray alarms;
-                if (options.has("alarms") == true) {
-                    alarms = options.getJSONArray("alarms");
-                } else {
-                    alarms = new JSONArray(); // default to empty array
+//        Notification.setDefaultTriggerReceiver(TriggerReceiver.class);
+
+        cordova.getThreadPool().execute(new Runnable() {
+            public void run() {
+                if (action.equals("wakeup")) {
+                    schedule(args);
+                    command.success();
                 }
-
-                saveToPrefs(cordova.getActivity().getApplicationContext(), alarms);
-                setAlarms(cordova.getActivity().getApplicationContext(), alarms, true);
-
-                WakeupPlugin.connectionCallbackContext = callbackContext;
-                PluginResult pluginResult = new PluginResult(PluginResult.Status.OK);
-                pluginResult.setKeepCallback(true);
-                callbackContext.sendPluginResult(pluginResult);
-            } else if (action.equalsIgnoreCase("snooze")) {
-                JSONObject options = args.getJSONObject(0);
-
-                if (options.has("alarms") == true) {
-                    Log.d(LOG_TAG, "scheduling snooze...");
-                    JSONArray alarms = options.getJSONArray("alarms");
-                    setAlarms(cordova.getActivity().getApplicationContext(), alarms, false);
+                else if (action.equals("snooze")) {
+                    snooze(args);
+                    command.success();
                 }
-
-                WakeupPlugin.connectionCallbackContext = callbackContext;
-                PluginResult pluginResult = new PluginResult(PluginResult.Status.OK);
-                pluginResult.setKeepCallback(true);
-                callbackContext.sendPluginResult(pluginResult);
-            } else {
-                PluginResult pluginResult = new PluginResult(PluginResult.Status.ERROR, LOG_TAG + " error: invalid action (" + action + ")");
-                pluginResult.setKeepCallback(true);
-                callbackContext.sendPluginResult(pluginResult);
-                ret = false;
+                else if (action.equals("alarm")) {
+                    alarm();
+                    command.success();
+                }
             }
-        } catch (JSONException e) {
-            PluginResult pluginResult = new PluginResult(PluginResult.Status.ERROR, LOG_TAG + " error: invalid json");
-            pluginResult.setKeepCallback(true);
-            callbackContext.sendPluginResult(pluginResult);
-            ret = false;
-        } catch (Exception e) {
-            PluginResult pluginResult = new PluginResult(PluginResult.Status.ERROR, LOG_TAG + " error: " + e.getMessage());
-            pluginResult.setKeepCallback(true);
-            callbackContext.sendPluginResult(pluginResult);
-            ret = false;
+        });
+
+        return true;
+    }
+
+    private viod alarm(JSONArray args)
+    {
+//        JSONObject options = args.getJSONObject(0);
+
+//        JSONArray alarms;
+//        if (options.has("alarms") == true)
+//        {
+//            alarms = options.getJSONArray("alarms");
+//        }
+//        else
+//        {
+//            alarms = new JSONArray(); // default to empty array
+//        }
+
+//        if (extrasBundle != null && extrasBundle.getString("type") != null && extrasBundle.getString("type").equals("daylist")) {
+//            // repeat in one week
+//            Date next = new Date(new Date().getTime() + (7 * 24 * 60 * 60 * 1000));
+//            Log.d(LOG_TAG, "resetting alarm at " + sdf.format(next));
+//
+//            Intent reschedule = new Intent(context, WakeupReceiver.class);
+//            if (extras != null) {
+//                reschedule.putExtra("extra", intent.getExtras().get("extra").toString());
+//            }
+//            reschedule.putExtra("day", WakeupPlugin.daysOfWeek.get(intent.getExtras().get("day")));
+//
+//            PendingIntent sender = PendingIntent.getBroadcast(context, 19999 + WakeupPlugin.daysOfWeek.get(intent.getExtras().get("day")), intent, PendingIntent.FLAG_UPDATE_CURRENT);
+//            AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+//            if (Build.VERSION.SDK_INT >= 19) {
+//                alarmManager.setExact(AlarmManager.RTC_WAKEUP, next.getTime(), sender);
+//            } else {
+//                alarmManager.set(AlarmManager.RTC_WAKEUP, next.getTime(), sender);
+//            }
+//        }
+
+        fireEvent("alarm", args);
+    }
+
+    private viod wakeup(JSONArray args)
+    {
+        JSONObject options = args.getJSONObject(0);
+
+        JSONArray alarms;
+        if (options.has("alarms") == true)
+        {
+            alarms = options.getJSONArray("alarms");
         }
-        return ret;
+        else
+        {
+            alarms = new JSONArray(); // default to empty array
+        }
+
+        saveToPrefs(cordova.getActivity().getApplicationContext(), alarms);
+        setAlarms(cordova.getActivity().getApplicationContext(), alarms, true);
+
+        fireEvent("wakeup", args);
+    }
+
+    private void function snooze(JSONArray obj)
+    {
+        JSONObject options = args.getJSONObject(0);
+
+        if (options.has("alarms") == true) {
+            Log.d(LOG_TAG, "scheduling snooze...");
+            JSONArray alarms = options.getJSONArray("alarms");
+            setAlarms(cordova.getActivity().getApplicationContext(), alarms, false);
+        }
+
+        fireEvent("snooze", obj);
     }
 
     public static void setAlarmsFromPrefs(Context context) {
@@ -377,6 +425,63 @@ public class WakeupPlugin extends CordovaPlugin {
         editor.putString("alarms", alarms.toString());
         editor.commit();
 
+    }
+
+    /**
+     * Fire given event on JS side. Does inform all event listeners.
+     *
+     * @param event
+     *      The event name
+     */
+    private void fireEvent(String event) {
+        fireEvent(event, null);
+    }
+
+    /**
+     * Fire given event on JS side. Does inform all event listeners.
+     *
+     * @param event
+     *      The event name
+     * @param data
+     *      Optional local notification to pass the id and properties.
+     */
+    static void fireEvent (String event, JSONArray data) {
+        String state = getApplicationState();
+         params = "\"" + state + "\"";
+
+        if (data != null) {
+            params = data.toString() + "," + params;
+        }
+
+        String js = "wakeuptimer.fireEvent(" +
+                "\"" + event + "\"," + params + ")";
+
+        sendJavascript(js);
+    }
+
+    /**
+     * Use this instead of deprecated sendJavascript
+     *
+     * @param js
+     *       JS code snippet as string
+     */
+    private static synchronized void sendJavascript(final String js) {
+
+//        if (!deviceready) {
+//            eventQueue.add(js);
+//            return;
+//        }
+        Runnable jsLoader = new Runnable() {
+            public void run() {
+                webView.loadUrl("javascript:" + js);
+            }
+        };
+        try {
+            Method post = webView.getClass().getMethod("post",Runnable.class);
+            post.invoke(webView,jsLoader);
+        } catch(Exception e) {
+            ((Activity)(webView.getContext())).runOnUiThread(jsLoader);
+        }
     }
 
 }
