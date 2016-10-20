@@ -8,11 +8,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TimeZone;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CordovaWebView;
 import org.apache.cordova.PluginResult;
+import org.apache.cordova.CordovaInterface;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -38,6 +41,15 @@ public class WakeupPlugin extends CordovaPlugin {
     // Reference to the web view for static access
     private static CordovaWebView webView = null;
 
+    // Indicates if the device is ready (to receive events)
+    private static Boolean deviceready = false;
+
+    // To inform the user about the state of the app in callbacks
+    protected static Boolean isInBackground = true;
+
+    // Queues all events before deviceready
+    private static ArrayList<String> eventQueue = new ArrayList<String>();
+
     protected static final int ID_DAYLIST_OFFSET = 10010;
     protected static final int ID_ONETIME_OFFSET = 10000;
     protected static final int ID_SNOOZE_OFFSET = 10001;
@@ -59,20 +71,30 @@ public class WakeupPlugin extends CordovaPlugin {
     public static CallbackContext connectionCallbackContext;
 
     @Override
-    public void onReset() {
-        // app startup
-        Log.d(LOG_TAG, "Wakeup Plugin onReset");
-        Bundle extras = cordova.getActivity().getIntent().getExtras();
-        if (extras != null && !extras.getBoolean("wakeup", false)) {
-            setAlarmsFromPrefs(cordova.getActivity().getApplicationContext());
-        }
-        super.onReset();
+    public void initialize (CordovaInterface cordova, CordovaWebView webView) {
+        Log.d(LOG_TAG, "initialize");
+        WakeupPlugin.webView = webView;
     }
+
+//    @Override
+//    public void onReset() {
+//        // app startup
+//        Log.d(LOG_TAG, "Wakeup Plugin onReset");
+//        Bundle extras = cordova.getActivity().getIntent().getExtras();
+//        if (extras != null && !extras.getBoolean("wakeup", false)) {
+//            setAlarmsFromPrefs(cordova.getActivity().getApplicationContext());
+//        }
+//        super.onReset();
+//    }
 
     @Override
     public void onResume(boolean multitasking) {
         super.onResume(multitasking);
-        Log.d(LOG_TAG, "resume");
+        Log.d(LOG_TAG, "onResume");
+
+        isInBackground = false;
+        deviceready();
+
         final Window win = cordova.getActivity().getWindow();
         win.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                 | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
@@ -88,7 +110,14 @@ public class WakeupPlugin extends CordovaPlugin {
     @Override
     public void onPause(boolean multitasking) {
         super.onPause(multitasking);
+        isInBackground = true;
         Log.d(LOG_TAG, "pause");
+    }
+
+    @Override
+    public void onDestroy() {
+        deviceready = false;
+        isInBackground = true;
     }
 
 //    public void onNewIntent(Intent intent) {
@@ -115,7 +144,7 @@ public class WakeupPlugin extends CordovaPlugin {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
                 if (action.equals("wakeup")) {
-                    schedule(args);
+                    wakeup(args);
                     command.success();
                 }
                 else if (action.equals("snooze")) {
@@ -123,7 +152,7 @@ public class WakeupPlugin extends CordovaPlugin {
                     command.success();
                 }
                 else if (action.equals("alarm")) {
-                    alarm();
+                    alarm(new JSONArray());
                     command.success();
                 }
             }
@@ -132,7 +161,7 @@ public class WakeupPlugin extends CordovaPlugin {
         return true;
     }
 
-    private viod alarm(JSONArray args)
+    private void alarm(JSONArray args)
     {
 //        JSONObject options = args.getJSONObject(0);
 
@@ -169,37 +198,41 @@ public class WakeupPlugin extends CordovaPlugin {
         fireEvent("alarm", args);
     }
 
-    private viod wakeup(JSONArray args)
+    private void wakeup(JSONArray args)
     {
-        JSONObject options = args.getJSONObject(0);
+        JSONArray alarms = new JSONArray();
 
-        JSONArray alarms;
-        if (options.has("alarms") == true)
-        {
-            alarms = options.getJSONArray("alarms");
-        }
-        else
-        {
-            alarms = new JSONArray(); // default to empty array
-        }
+        try {
+            JSONObject options = args.getJSONObject(0);
+            if (options.has("alarms") == true)
+            {
+                alarms = options.getJSONArray("alarms");
+            }
+        } catch (JSONException exception) {}
 
         saveToPrefs(cordova.getActivity().getApplicationContext(), alarms);
-        setAlarms(cordova.getActivity().getApplicationContext(), alarms, true);
+        try {
+            setAlarms(cordova.getActivity().getApplicationContext(), alarms, true);
+        } catch (JSONException exception) {}
+
 
         fireEvent("wakeup", args);
     }
 
-    private void function snooze(JSONArray obj)
+    private void snooze(JSONArray args)
     {
-        JSONObject options = args.getJSONObject(0);
+        try {
+            JSONObject options = args.getJSONObject(0);
 
-        if (options.has("alarms") == true) {
-            Log.d(LOG_TAG, "scheduling snooze...");
-            JSONArray alarms = options.getJSONArray("alarms");
-            setAlarms(cordova.getActivity().getApplicationContext(), alarms, false);
-        }
+            if (options.has("alarms") == true)
+            {
+                Log.d(LOG_TAG, "scheduling snooze...");
+                JSONArray alarms = options.getJSONArray("alarms");
+                setAlarms(cordova.getActivity().getApplicationContext(), alarms, false);
+            }
+        } catch (JSONException exception) {}
 
-        fireEvent("snooze", obj);
+        fireEvent("snooze", args);
     }
 
     public static void setAlarmsFromPrefs(Context context) {
@@ -289,18 +322,18 @@ public class WakeupPlugin extends CordovaPlugin {
                 alarmManager.set(AlarmManager.RTC_WAKEUP, alarmDate.getTimeInMillis(), sender);
             }
 
-            if (WakeupPlugin.connectionCallbackContext != null) {
-                JSONObject o = new JSONObject();
-                o.put("type", "set");
-                o.put("alarm_type", type);
-                o.put("alarm_date", alarmDate.getTimeInMillis());
-
-                Log.d(LOG_TAG, "alarm time in millis: " + alarmDate.getTimeInMillis());
-
-                PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, o);
-                pluginResult.setKeepCallback(true);
-                WakeupPlugin.connectionCallbackContext.sendPluginResult(pluginResult);
-            }
+//            if (WakeupPlugin.connectionCallbackContext != null) {
+//                JSONObject o = new JSONObject();
+//                o.put("type", "set");
+//                o.put("alarm_type", type);
+//                o.put("alarm_date", alarmDate.getTimeInMillis());
+//
+//                Log.d(LOG_TAG, "alarm time in millis: " + alarmDate.getTimeInMillis());
+//
+//                PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, o);
+//                pluginResult.setKeepCallback(true);
+//                WakeupPlugin.connectionCallbackContext.sendPluginResult(pluginResult);
+//            }
         }
     }
 
@@ -428,6 +461,20 @@ public class WakeupPlugin extends CordovaPlugin {
     }
 
     /**
+     * Call all pending callbacks after the deviceready event has been fired.
+     */
+    private static synchronized void deviceready () {
+        isInBackground = false;
+        deviceready = true;
+
+        for (String js : eventQueue) {
+            sendJavascript(js);
+        }
+
+        eventQueue.clear();
+    }
+
+    /**
      * Fire given event on JS side. Does inform all event listeners.
      *
      * @param event
@@ -447,7 +494,7 @@ public class WakeupPlugin extends CordovaPlugin {
      */
     static void fireEvent (String event, JSONArray data) {
         String state = getApplicationState();
-         params = "\"" + state + "\"";
+        String params = "\"" + state + "\"";
 
         if (data != null) {
             params = data.toString() + "," + params;
@@ -467,21 +514,29 @@ public class WakeupPlugin extends CordovaPlugin {
      */
     private static synchronized void sendJavascript(final String js) {
 
-//        if (!deviceready) {
-//            eventQueue.add(js);
-//            return;
-//        }
+        if (!deviceready)
+        {
+            Log.d(LOG_TAG, "add to queue: "+js);
+            eventQueue.add(js);
+            return;
+        }
+        Log.d(LOG_TAG, "send: "+js);
         Runnable jsLoader = new Runnable() {
             public void run() {
-                webView.loadUrl("javascript:" + js);
+                WakeupPlugin.webView.loadUrl("javascript:" + js);
             }
         };
         try {
-            Method post = webView.getClass().getMethod("post",Runnable.class);
-            post.invoke(webView,jsLoader);
+            Method post = WakeupPlugin.webView.getClass().getMethod("post",Runnable.class);
+            post.invoke(WakeupPlugin.webView, jsLoader);
         } catch(Exception e) {
-            ((Activity)(webView.getContext())).runOnUiThread(jsLoader);
+            ((Activity)(WakeupPlugin.webView.getContext())).runOnUiThread(jsLoader);
         }
+    }
+
+    static String getApplicationState () {
+        return isInBackground ? "background" : "foreground";
+
     }
 
 }

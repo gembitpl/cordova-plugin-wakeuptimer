@@ -4,6 +4,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import org.apache.cordova.PluginResult;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -27,6 +28,7 @@ public class WakeupReceiver extends BroadcastReceiver {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Log.d(LOG_TAG, "wakeuptimer expired at " + sdf.format(new Date().getTime()));
 
+        launchApp(context);
         WakeupPlugin.fireEvent("alarm", getExtra(intent));
     }
 
@@ -38,9 +40,27 @@ public class WakeupReceiver extends BroadcastReceiver {
 //        Intent i = new Intent(context, c);
         if (bundle != null && bundle.get("extra") != null)
         {
-            options = new JSONArray(bundle.get("extra").toString());
+            try {
+                options = new JSONArray(bundle.get("extra").toString());
+            } catch (JSONException exception) {
+            }
         }
 
         return options;
+    }
+
+    private void launchApp(Context context)
+    {
+        String pkgName  = context.getPackageName();
+
+        Intent intent = context
+                .getPackageManager()
+                .getLaunchIntentForPackage(pkgName);
+
+        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP
+        );
+
+        context.startActivity(intent);
     }
 }
